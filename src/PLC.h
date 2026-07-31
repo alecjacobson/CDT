@@ -129,7 +129,7 @@ public:
     bool is_convex;
     bool is_simply_connected;
 
-    PLCface() : is_convex(true), is_simply_connected(true) {}
+    PLCface() {}
 
     void zip();
 
@@ -148,6 +148,8 @@ public:
     }
 
     static inline bool isEmpty(const PLCface& e) { return e.bounding_edges.empty(); }
+
+    bool hasBoundingVertex(uint32_t v) const { return std::find(vertices.begin(), vertices.end(), v) != vertices.end(); }
 };
 
 
@@ -220,12 +222,14 @@ public:
   bool splitMissingEdge(uint32_t me);
   uint32_t findEncroachingPoint(const PLCedge& e, uint64_t& tet) const;
 
+  implicitPoint_LNC* createMidPoint(const uint32_t ei) const;
+  implicitPoint_LNC* createSteinerPoint_Strategy1(const uint32_t ei, const uint32_t ref, uint32_t& acute_v) const;
+  implicitPoint_LNC* createSteinerPoint_Strategy2(const uint32_t ei, const uint32_t ref, uint32_t& acute_v) const;
+  implicitPoint_LNC* createSteinerPoint(const uint32_t ei, uint64_t& ct, uint32_t& acute_v) const;
+
   void edgeSplit(const uint32_t ei, pointType* Pt_c, uint32_t acute_v_id);
   void middleEdgeSplit(const uint32_t ei);
-  void splitStrategy1(const uint32_t ei, const uint32_t ref);
-  void splitStrategy2(const uint32_t ei, const uint32_t ref);
-  void segmentRecovery_HSi(bool quiet =false); // Segment recovery main function
-
+  void segmentRecovery_HSi(bool quiet = false); // Segment recovery main function
 
   void makePLCfaces();
   void initFaceFlatEdges(PLCface& f);
@@ -242,9 +246,11 @@ public:
   bool isTriangleOnFace(const uint32_t cv[3], uint32_t fi, const std::vector<std::pair<uint32_t, uint32_t>>& orig_flat_edges);
   bool tetIntersectsInnerTriangle(uint64_t t, uint32_t v1, uint32_t v2, uint32_t v3);
 
+  bool triangleOverlapsFace(const uint64_t c, const uint32_t f) const;
+
   // Collect tetrahedra whose interior intersects a PLC face.
-  // If cornerMask is non-null, each tet face that overlaps with the PLC face is marked
-  void getTetsIntersectingFace(uint32_t fi, std::vector<uint64_t> *i_tets, std::vector<bool> *cornerMask =NULL);
+  // If mark_overlaps, each tet face that overlaps with the PLC face is marked
+  void getTetsIntersectingFace(uint32_t fi, std::vector<uint64_t> *i_tets, bool mark_overlaps);
 
   // TRUE if v1 and v2 are consecutive in one of the boundary loops of f
   bool adjacentFaceVertices(uint32_t v1, uint32_t v2, const PLCface& f);
@@ -263,6 +269,7 @@ public:
   uint64_t meshCavity(const std::vector<uint64_t>& bnd, const std::vector<uint32_t>& vertices, std::vector<uint64_t>& base);
   uint64_t expandCavity(std::vector<uint64_t>& bnd, std::vector<uint32_t>& vertices, uint64_t t, const PLCface& f);
 
+  void getConstrainedTriangles() const;
   size_t markInnerTets();
 
   //void getTetsIntersectingFaceSlow(uint32_t fi, std::vector<uint64_t>* i_tets) {
@@ -282,21 +289,52 @@ public:
   //    return;
   //}
 
-  //void saveFaces() const {
-  //    FILE* fp = fopen("faces.off", "w");
-  //    fprintf(fp, "OFF\n%lu %lu 0\n", delmesh.vertices.size(), faces.size());
-  //    for (auto* v : delmesh.vertices) {
-  //        double x, y, z;
-  //        v->getApproxXYZCoordinates(x, y, z);
-  //        fprintf(fp, "%f %f %f\n", x, y, z);
-  //    }
-  //    for (const PLCface& f : faces) {
-  //        fprintf(fp, "%lu ", f.vertices.size());
-  //        for (auto vi : f.vertices) fprintf(fp, "%u ", vi);
-  //        fprintf(fp, "\n");
-  //    }
-  //    fclose(fp);
-  //}
+  void saveFaces() const {
+      FILE* fp = fopen("plc_faces.off", "w");
+      fprintf(fp, "OFF\n%zu %zu 0\n", delmesh.vertices.size(), faces.size());
+      for (auto* v : delmesh.vertices) {
+          double x, y, z;
+          v->getApproxXYZCoordinates(x, y, z);
+          fprintf(fp, "%f %f %f\n", x, y, z);
+      }
+      for (const PLCface& f : faces) {
+          fprintf(fp, "%zu ", f.vertices.size());
+          for (auto vi : f.vertices) fprintf(fp, "%u ", vi);
+          fprintf(fp, "\n");
+      }
+      fclose(fp);
+  }
+
+  void saveTriangles() const {
+      FILE* fp = fopen("plc_triangles.off", "w");
+      fprintf(fp, "OFF\n%zu %u 0\n", delmesh.vertices.size(), input_nt);
+      for (auto* v : delmesh.vertices) {
+          double x, y, z;
+          v->getApproxXYZCoordinates(x, y, z);
+          fprintf(fp, "%f %f %f\n", x, y, z);
+      }
+      for (uint32_t i = 0; i < input_nt*3; i += 3) {
+          fprintf(fp, "3 %u %u %u\n", input_tv[i], input_tv[i + 1], input_tv[i + 2]);
+      }
+      fclose(fp);
+  }
+
+  void saveEdges() const {
+      FILE* fp = fopen("edges.wrl", "w");
+      fprintf(fp, "#VRML V1.0 ascii\nSeparator {\nCoordinate3 {\npoint[\n");
+      for (auto* v : delmesh.vertices) {
+          double x, y, z;
+          v->getApproxXYZCoordinates(x, y, z);
+          fprintf(fp, "%f %f %f,\n", x, y, z);
+      }
+      fprintf(fp, "]\n}\nIndexedLineSet {\ncoordIndex[\n");
+
+      for (const PLCedge& f : edges) {
+          fprintf(fp, "%u, %u, -1,\n", f.ep[0], f.ep[1]);
+      }
+      fprintf(fp, "]\n}\n}\n");
+      fclose(fp);
+  }
 };
 
 #endif // _PLC_
