@@ -1131,7 +1131,12 @@ void PLCx::getTetsIntersectingFace(uint32_t fi, std::vector<uint64_t> *i_tets, b
         B.erase(std::unique(B.begin(), B.end()), B.end());
         for (uint64_t t : B) delmesh.mark_Tet_1(t);
     }
-    else delmesh.mark_Tet_1(t0);
+    // t0 stays UINT64_MAX when the search above found no tet intersecting the face interior, which is
+    // why the push into B two lines up is guarded. Marking it here was not: mark_tetrahedra[UINT64_MAX]
+    // indexes 4 bytes BEFORE the array (base + 4*(2^64-1) wraps), corrupting the heap and aborting the
+    // process on the next free. Nothing to mark is the correct outcome -- B is empty, the walk below
+    // does nothing, and the face reports no intersecting tets.
+    else if (t0 != UINT64_MAX) delmesh.mark_Tet_1(t0);
 
     // In the remainder, OK means "add n to B, mark it"
     // for each tet t in B
