@@ -1494,21 +1494,26 @@ bool PLCx::recoverFaceHSi(std::vector<uint64_t>& i_tets, const PLCface& f, bool&
     uint64_t t;
     std::vector<uint64_t> toremove;
     bool cavity_ok = true;
+    // Set when a cavity boundary face has a vertex that was classified onto the other side of the
+    // face plane, so the face cannot be reindexed into its own cavity. Same failure class as the
+    // two v_orient checks below, but detectable before any expansion has happened.
+    bool cavity_invalid = false;
 
-    while ((t = missingFaceInCavity(top_faces, top_vertices))!=UINT64_MAX) {
+    while ((t = missingFaceInCavity(top_faces, top_vertices, cavity_invalid))!=UINT64_MAX) {
         toremove.push_back(expandCavity(top_faces, top_vertices, t, f));
         if (v_orient[top_vertices.back()] < 0) { // This might happen due to a theoretical bug in Si's paper
             cavity_ok = false; break;
         }
         std::sort(top_vertices.begin(), top_vertices.end());
     }
-    while ((t = missingFaceInCavity(bottom_faces, bottom_vertices)) != UINT64_MAX) {
+    while (!cavity_invalid && (t = missingFaceInCavity(bottom_faces, bottom_vertices, cavity_invalid)) != UINT64_MAX) {
         toremove.push_back(expandCavity(bottom_faces, bottom_vertices, t, f));
         if (v_orient[bottom_vertices.back()] > 0) { // This might happen due to a theoretical bug in Si's paper
             cavity_ok = false; break;
         }
         std::sort(bottom_vertices.begin(), bottom_vertices.end());
     }
+    if (cavity_invalid) cavity_ok = false;
 
 //    if (!cavity_ok) exit(10);
 
@@ -1523,23 +1528,24 @@ bool PLCx::recoverFaceHSi(std::vector<uint64_t>& i_tets, const PLCface& f, bool&
         assert(t == UINT64_MAX);
     }
 
-    if (!toremove.empty()) {
-        if (cavity_ok) {
-            for (uint32_t v : top_vertices) v_orient[v] = UNDET_ORIENTATION;
-            for (uint32_t v : bottom_vertices) v_orient[v] = UNDET_ORIENTATION;
-            for (uint64_t y : toremove) delmesh.pushAndMarkDeletedTets(y);
-            delmesh.removeDelTets();
-            return false;
-        }
-        // If Hang Si's cavity expansion fails revert to slower gift-wrap method
-        else {
-            if (!f.flat_vertices.empty()) 
-                ip_error("Hang Si's cavity expansion fails on a flat face with internal vertices.\nTreatment of this very particular case was not implemented!\n");
-            delmesh.recoverFaceGiftWrap(i_tets, v_orient);
-            sisMethodWorks = false;
-            for (uint32_t v : top_vertices) v_orient[v] = UNDET_ORIENTATION;
-            for (uint32_t v : bottom_vertices) v_orient[v] = UNDET_ORIENTATION;
-        }
+    // If Hang Si's cavity expansion fails revert to slower gift-wrap method. This has to be reachable
+    // with an empty 'toremove' too: an unreindexable boundary face condemns the cavity on the very
+    // first check, before a single expansion, and leaving the face unrecovered here would silently
+    // corrupt the result instead of falling back.
+    if (!cavity_ok) {
+        if (!f.flat_vertices.empty())
+            ip_error("Hang Si's cavity expansion fails on a flat face with internal vertices.\nTreatment of this very particular case was not implemented!\n");
+        delmesh.recoverFaceGiftWrap(i_tets, v_orient);
+        sisMethodWorks = false;
+        for (uint32_t v : top_vertices) v_orient[v] = UNDET_ORIENTATION;
+        for (uint32_t v : bottom_vertices) v_orient[v] = UNDET_ORIENTATION;
+    }
+    else if (!toremove.empty()) {
+        for (uint32_t v : top_vertices) v_orient[v] = UNDET_ORIENTATION;
+        for (uint32_t v : bottom_vertices) v_orient[v] = UNDET_ORIENTATION;
+        for (uint64_t y : toremove) delmesh.pushAndMarkDeletedTets(y);
+        delmesh.removeDelTets();
+        return false;
     }
 
     return true;
@@ -1594,7 +1600,7 @@ public:
     bdUpdater(uint64_t _t1, uint64_t _t2, uint64_t _bnd) : t1(_t1), t2(_t2), bnd(_bnd) {}
 };
 
-uint64_t PLCx::missingFaceInCavity(const std::vector<uint64_t>& bnd, const std::vector<uint32_t>& vertices) {
+uint64_t PLCx::missingFaceInCavity(const std::vector<uint64_t>& bnd, const std::vector<uint32_t>& vertices, bool& cavity_invalid) {
     // DT of vertices
     TetMesh dt(true);
     dt.vertices.resize(vertices.size());
@@ -1609,6 +1615,19 @@ uint64_t PLCx::missingFaceInCavity(const std::vector<uint64_t>& bnd, const std::
         uint32_t v[3];
         delmesh.getFaceVertices(t, v);
         for (int i = 0; i < 3; i++) v[i] = v_reindex[v[i]];
+
+        // A boundary face of this cavity whose vertices are not all IN this cavity cannot be
+        // reindexed: v_reindex still holds its UINT32_MAX "unset" marker for them. That value is
+        // also INFINITE_VERTEX, so passing it on reads inc_tet[UINT32_MAX] -- 32GB past a vector
+        // sized to the cavity -- and segfaults. It means the upper/lower split assigned this face
+        // to one side while classifying one of its vertices onto the other, so the cavity is not
+        // valid. Report it and let the caller fall back to gift-wrapping, the same escape the
+        // expansion loop below already takes when it detects the same inconsistency.
+        if (v[0] == UINT32_MAX || v[1] == UINT32_MAX || v[2] == UINT32_MAX) {
+            cavity_invalid = true;
+            for (size_t i = 0; i < vertices.size(); i++) v_reindex[vertices[i]] = UINT32_MAX;
+            return UINT64_MAX;
+        }
 
         if (!dt.getTetsFromFaceVertices(v[0], v[1], v[2], nt)) {
             for (size_t i = 0; i < vertices.size(); i++) v_reindex[vertices[i]] = UINT32_MAX;
@@ -1650,6 +1669,13 @@ uint64_t PLCx::meshCavity(const std::vector<uint64_t>& bnd, const std::vector<ui
         uint32_t v[3];
         delmesh.getFaceVertices(t, v);
         for (int i = 0; i < 3; i++) v[i] = v_reindex[v[i]];
+
+        // Same unmappable-face guard as missingFaceInCavity: an unset v_reindex entry is
+        // UINT32_MAX, which is INFINITE_VERTEX, and indexing inc_tet with it segfaults.
+        if (v[0] == UINT32_MAX || v[1] == UINT32_MAX || v[2] == UINT32_MAX) {
+            for (size_t i = 0; i < vertices.size(); i++) v_reindex[vertices[i]] = UINT32_MAX;
+            return t; // Need cavity expansion
+        }
 
         if (!dt.getTetsFromFaceVertices(v[0], v[1], v[2], nt)) {
             for (size_t i = 0; i < vertices.size(); i++) v_reindex[vertices[i]] = UINT32_MAX;
