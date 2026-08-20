@@ -342,6 +342,28 @@ public:
     std::vector<uint32_t> edge_vertices; // e1_v1, e1_v2, e2_v1, e2_v2, ...
     const char* input_file_name;
 
+    bool saveOFF(const char* filename) const {
+        ofstream f(filename);
+
+        if (!f) {
+            std::cerr << "\ninputPLC::saveOFF: Can't open file for writing.\n";
+            return false;
+        }
+
+        f << "OFF\n" << numVertices() << " " << numTriangles() << " 0\n";
+
+        for (size_t i = 0; i < numVertices(); i++)
+            f << coordinates[i * 3] << " " << coordinates[i * 3 + 1] << " " << coordinates[i * 3 + 2] << "\n";
+
+        for (size_t i = 0; i < numTriangles(); i++)
+            f << "3 " << triangle_vertices[i * 3] << " " << triangle_vertices[i * 3 + 1] << " " << triangle_vertices[i * 3 + 2] << "\n";
+
+        f.close();
+
+        return true;
+
+    }
+
     uint32_t numVertices() const { return (uint32_t)coordinates.size() / 3; }
     uint32_t numTriangles() const { return (uint32_t)triangle_vertices.size() / 3; }
     uint32_t numEdges() const { return (uint32_t)edge_vertices.size() / 2; }
@@ -451,17 +473,29 @@ public:
           (uint32_t)edge_vertices.size() / 2);
     }
 
-    // Add eight vertices to enclose the input in a box
-    void addBoundingBoxVertices() {
-        double bbmin[3] = { DBL_MAX, DBL_MAX, DBL_MAX };
-        double bbmax[3] = { -DBL_MAX, -DBL_MAX, -DBL_MAX };
+    void getBoundingBox(double bbmin[3], double bbmax[3]) const {
+        bbmin[0] = bbmin[1] = bbmin[2] = DBL_MAX;
+        bbmax[0] = bbmax[1] = bbmax[2] = -DBL_MAX;
         for (uint32_t i = 0; i < numVertices(); i++) {
-            const double *v = coordinates.data() + i * 3;
+            const double* v = coordinates.data() + i * 3;
             for (int j = 0; j < 3; j++) {
                 if (v[j] < bbmin[j]) bbmin[j] = v[j];
                 if (v[j] > bbmax[j]) bbmax[j] = v[j];
             }
         }
+    }
+
+    double getBoundingBoxSquaredDiagonal() const {
+        double bbmin[3], bbmax[3];
+        getBoundingBox(bbmin, bbmax);
+        const double bbox[3] = { bbmax[0] - bbmin[0], bbmax[1] - bbmin[1], bbmax[2] - bbmin[2] };
+        return bbox[0] * bbox[0] + bbox[1] * bbox[1] + bbox[2] * bbox[2];
+    }
+
+    // Add eight vertices to enclose the input in a box
+    void addBoundingBoxVertices() {
+        double bbmin[3], bbmax[3];
+        getBoundingBox(bbmin, bbmax);
         const double bbox[3] = { bbmax[0] - bbmin[0], bbmax[1] - bbmin[1], bbmax[2] - bbmin[2] };
         for (int j = 0; j < 3; j++) {
             bbmin[j] -= bbox[j] * 0.05;

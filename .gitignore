@@ -1,1 +1,3 @@
-build/*
+build
+not_for_repo
+.local.cmake

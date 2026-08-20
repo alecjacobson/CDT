@@ -36,8 +36,8 @@ TetMesh* createSteinerCDT(inputPLC& plc, const char *options) {
 		verbose = true; break;
 	case 'w':
 		logscreen = true; break;
-	case 'f':
-		snap = true; break;
+	//case 'f':
+	//	snap = true; break;
 	//case 'o':
 	//	optimize = true; break;
 	} // Just ignore unknown options
@@ -100,11 +100,11 @@ TetMesh* createSteinerCDT(inputPLC& plc, const char *options) {
 		finishLogging();
 	}
 
-	if (snap) {
-		if (!tin->optimizeNearDegenerateTets(verbose)) {
-			std::cerr << "Could not force FP representability.\n";
-		}
-	}
+	//if (snap) {
+	//	if (!tin->optimizeNearDegenerateTets(verbose)) {
+	//		std::cerr << "Could not force FP representability.\n";
+	//	}
+	//}
 
 	//if (optimize) tin->optimizeMesh();
 
@@ -173,10 +173,17 @@ bool saveOutputFile(TetMesh& tin, const char* filename, const char* options) {
 	return ret;
 }
 
+#ifdef _MSC_VER
+#ifndef NDEBUG
+#define DEBUG
+#endif
+#endif
+
 int main(int argc, char* argv[])
 {
 	initFPU();
 
+#ifndef DEBUG
 	if (argc < 2) {
 		std::cout << "CDT - Create a constrained Delaunay tetrahedrization out of a triangulated OFF file.\n";
 		std::cout << "USAGE: CDT [-lbvfqnrs] filename.off\n";
@@ -187,7 +194,6 @@ int main(int argc, char* argv[])
 		std::cout << "-b: add eight vertices to enclose everything in a box\n";
 		std::cout << "-v: verbose mode\n";
 		std::cout << "-w: log on screen instead of file (implies -l)\n";
-		std::cout << "-f: try to make the output representable using floating point\n";
 		std::cout << "-q: rational output\n";
 		std::cout << "-n: binary output\n";
 		std::cout << "-m: use MEDIT format instead of TET\n";
@@ -199,10 +205,14 @@ int main(int argc, char* argv[])
 		std::cout << "E.g. CDT -s my_dir/test.off produces my_dir/test.off.tet and my_dir/test.off.off\n";
 		return 0;
 	}
+#endif
 
 	char filename[2048] = "..\\Input_file\\bracket.off";
 
 	std::string options = "";
+#ifdef DEBUG
+	options += "v";
+#endif
 
 	for (int i = 1; i < argc; i++)
 		if (argv[i][0] == '-') {

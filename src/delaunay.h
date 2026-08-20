@@ -16,9 +16,18 @@
 #define DT_OUT  1
 #define DT_IN  2
 
-#define MARKBIT(m, twoPowBit) m |= ((uint32_t)twoPowBit)
-#define UNMARKBIT(m, twoPowBit) m &= (~((uint32_t)twoPowBit))
-#define ISMARKEDBIT(m, twoPowBit) m & ((uint32_t)twoPowBit) 
+#define MARKBIT(m, twoPowBit) m |= ((uint32_t)(twoPowBit))
+#define UNMARKBIT(m, twoPowBit) m &= (~((uint32_t)(twoPowBit)))
+#define ISMARKEDBIT(m, twoPowBit) m & ((uint32_t)(twoPowBit)) 
+
+// We use the 'deleted' bit (uint32_t)1073741824 to mark a visit
+// and its half (uint32_t)536870912 to mark a double visit
+#define IEV_IS_UNVISITED(t) (mark_tetrahedra[t] & ((uint32_t)1610612736)) == 0
+#define IEV_MARK_UNVISITED(t) mark_tetrahedra[t] &= (~((uint32_t)1610612736))
+#define IEV_MARK_VISITED_TWICE(t) mark_tetrahedra[t] |= ((uint32_t)536870912)
+#define IEV_IS_VISITED_TWICE(t) mark_tetrahedra[t] & ((uint32_t)536870912)
+#define IEV_GET_IN_OR_OUT(t) (mark_tetrahedra[t] & ((uint32_t)3)) // 1->OUT, 2->IN
+#define IEV_MARK_IN_OR_OUT(t, m) mark_tetrahedra[t] |= m
 
 // Uncommenting the following macro definition makes the code use modified parts of hxt_SeqDel (Copyright (C) 2018 Célestin Marot).
 // hxt_SeqDel is a sequential Delaunay triangulator hosted at https://git.immc.ucl.ac.be/hextreme/hxt_seqdel as of 2020.
@@ -26,7 +35,7 @@
 // the whole CDT code.
 // If you need to use this code under the less restrictive LGPL license, please comment the following line.
 // This will make the code slightly slower (from 1% to 3% depending on the cases).
-// #define USE_MAROTS_METHOD
+//#define USE_MAROTS_METHOD
 
 // Tetrahedral mesh data structure
 
@@ -39,6 +48,7 @@ public:
   std::vector<uint64_t> tet_neigh; // Tet opposites
   mutable std::vector<uint32_t> mark_tetrahedra; // Marks on tets
   mutable std::vector<unsigned char> marked_vertex; // Marks on vertices
+  mutable std::vector<bool> cornerMask; // Marks on corners
 
   // Gift-wrapping fields
   std::vector<int> memo_o3d;
@@ -83,6 +93,9 @@ public:
   // If inner_only is set, only tets tagged as DT_IN are saved
   bool saveTET(const char* filename, bool inner_only = false) const;
 
+  // Save the mesh to a .vtu file (ParaView compatible - XML)
+  bool saveVTU(const char* filename, bool inner_only = false) const;
+
   // Save the mesh to a .mesh file (MEDIT format)
   // If inner_only is set, only tets tagged as DT_IN are saved
   bool saveMEDIT(const char* filename, bool inner_only = false) const;
@@ -98,11 +111,14 @@ public:
 
   // Marks internal tets ad DT_IN and external as DT_OUT and return the number of internal tets.
   // cornerMask must be TRUE for each corner whose opposite face is a constraint.
-  size_t markInnerTets(std::vector<bool>& cornerMask, uint64_t single_start = UINT64_MAX);
+  size_t markInnerTets(uint64_t single_start = UINT64_MAX);
+  
+  // Same as above, but marks as DT_OUT only ghosts and tets that can be reached from ghosts
+  // without crossing any constraint. All other tets are marked as DT_IN.
+  void markInnerTetsNonManifold();
 
   // Clear deleted tets after insertions
   void removeDelTets();
-  void removeManyDelTets();
 
   // Clear deleted vertices after removal
   void removeDelVertices();
@@ -127,6 +143,9 @@ public:
   // TRUE if t has vertex v
   bool tetHasVertex(uint64_t t, uint32_t v) const;
 
+  // TRUE if tet contains p (boundary included)
+  bool tetContainsPoint(uint64_t tet, const pointType* p) const;
+
   // Init 'ov' with the two vertices of tet which are not in 'v'
   void oppositeTetEdge(const uint64_t tet, const uint32_t v[2], uint32_t ov[2]) const;
 
@@ -139,6 +158,9 @@ public:
 
   // Fill v with the three vertices of t	
   void getFaceVertices(uint64_t t, uint32_t v[3]) const;
+
+  // Same as above, but vertices are sorted based on their indexes
+  void getFaceSortedVertices(uint64_t t, uint32_t v[3]) const;
 
   // Fill 'nt' with the two tets that share the vertices v1,v2,v3
   bool getTetsFromFaceVertices(uint32_t v1, uint32_t v2, uint32_t v3, uint64_t* nt) const;
@@ -163,7 +185,7 @@ public:
   const uint32_t* getTetNodes(uint64_t tet) const { return tet_node.data() + tet; }
   const uint64_t* getTetNeighs(uint64_t tet) const { return tet_neigh.data() + tet; }
 
-  // tetNi is a sum modulo 3 - used to traverse the nodes of a tet
+  // tetNi is a sum modulo 4 - used to traverse the nodes of a tet
   static size_t tetN1(const size_t i) { return (i + 1) & 3; }
   static size_t tetN2(const size_t i) { return (i + 2) & 3; }
   static size_t tetN3(const size_t i) { return (i + 3) & 3; }
@@ -180,9 +202,26 @@ public:
       marked_vertex.push_back(0);
   }
 
+  // Pop an isolated vertex from the structure
+  pointType *popVertex() {
+      pointType* p = vertices.back();
+      vertices.pop_back();
+      inc_tet.pop_back();
+      marked_vertex.pop_back();
+      return p;
+  }
+
   // Inserts an isolated vertex which is already in the vertices array.
   // ct is a hint for the algorithm to start searching the tet containing vi
   void insertExistingVertex(const uint32_t vi, uint64_t& ct);
+
+  // fill 'cavityCorners' with tets bounding v_id's cavity
+  void getUnconstrainedCavity(const uint32_t v_id, const uint64_t tet, std::vector<uint64_t>& cavityCorners);
+  void getConstrainedCavity(const uint32_t v_id, uint64_t& tet, std::vector<uint64_t>& cavityCorners, uint32_t& cv1, uint32_t& cv2, uint32_t& cv3);
+  // fill 'adjacencies' with consecutive pairs of edge-adjacent tets in cavityCorners
+  void getCavityConnectivity(const std::vector<uint64_t>& cavityCorners, std::vector<uint64_t>& adjacencies) const;
+  // replace tetrahedra bounded by cavityCorners with new tets around vi
+  void retetrahedrizeCavity(const uint32_t v_id, const std::vector<uint64_t>& cavityCorners, const std::vector<uint64_t>& adjacencies, const uint32_t mark);
 
   // Starting from 'tet', move by adjacencies until a tet is found that
   // contains vi. Return that tet.
@@ -224,7 +263,11 @@ public:
   // Thes two functions mark/check one particular bit stating that a tet must be deleted.
   // Differently from above, here a tet is identified by its first corner.
   void markToDelete(uint64_t c) { mark_tetrahedra[c >> 2] |= ((uint32_t)1073741824); }
+  void unmarkToDelete(uint64_t c) { mark_tetrahedra[c >> 2] &= (~(uint32_t)1073741824); }
   bool isToDelete(uint64_t c) const { return mark_tetrahedra[c >> 2] & ((uint32_t)1073741824); }
+  bool isToDeleteSmall(uint64_t c) const { return mark_tetrahedra[c] & ((uint32_t)1073741824); }
+  void moveDeletedToTail(uint64_t t, uint64_t l);
+  void undeleteTets(size_t num);
 
   // Marks a tet (identified by its first corner) as 'removed' and add it to the queue
   // for eventual deletion.
@@ -252,14 +295,9 @@ public:
   // Collect all the vertices contained in the smallest sphere by ep0 and ep1
   // and return the one generating the largest circumcircle with ep0 and ep1.
   // Init tet with one tet having the encroaching point
+  uint32_t findEncroachingPoint_inexact(const uint32_t ep0, const uint32_t ep1, uint64_t& tet) const;
+  uint32_t findEncroachingPoint_exact(const uint32_t ep0, const uint32_t ep1, uint64_t& tet) const;
   uint32_t findEncroachingPoint(const uint32_t ep0, const uint32_t ep1, uint64_t& tet) const;
-
-  // Start from c and turn around v1-v2 as long as adjacencies are well defined.
-  // When an invalid adjacency is found, reinit it and exit.
-  void seekAndSetMutualAdjacency(int p_o0, int p_o1, int p_o2, const uint32_t* v, uint64_t c, uint64_t o, const uint32_t* tet_node_data, uint64_t* tet_neigh_data);
-
-  // Rebuild internal adjacencies for the cavity tet opposite to c
-  void restoreLocalConnectivty(uint64_t c, const uint32_t* tet_node_data, uint64_t* tet_neigh_data);
 
 #ifdef USE_MAROTS_METHOD
   class DelTmp {
@@ -304,62 +342,6 @@ public:
   bool isUpperCavityTet(const uint64_t t, std::vector<int>& v_orient) const;
   bool isLowerCavityTet(const uint64_t t, std::vector<int>& v_orient) const;
   void recoverFaceGiftWrap(std::vector<uint64_t>& i_tets, std::vector<int>& v_orient);
-
-  bool optimizeNearDegenerateTets(bool verbose =false);
-
-
-  /// Operations to optimize the mesh
-
-  // Split an edge ev0-ev1 into four subtets by inserting an isolated vertex v
-  void splitEdge(uint32_t ev0, uint32_t ev1, uint32_t v);
-
-  // 2-3 swap
-  bool swapFace(uint64_t r, bool prevent_inversion, double min_energy = DBL_MAX);
-
-  // Edge removal
-  bool removeEdge(uint32_t v1, uint32_t v2, double min_energy = DBL_MAX);
-
-  // Collapse an edge onto its first endpoint
-  bool collapseOnV1(uint32_t v1, uint32_t v2, bool prevent_inversion, double min_energy = DBL_MAX);
-
-  // Fill 'bet' with boundary faces incident at v1-v2
-  void boundaryETcorners(uint32_t v1, uint32_t v2, std::vector<uint64_t>& bet) const;
-
-  bool isOnBoundary(uint32_t v1, uint32_t v2) const {
-      std::vector<uint64_t> bet;
-      boundaryETcorners(v1, v2, bet);
-      return !bet.empty();
-  }
-
-  bool isOnBoundary(uint32_t v) const {
-      std::vector<uint64_t> bvt;
-      boundaryVTcorners(v, bvt);
-      return !bvt.empty();
-  }
-
-  // Fill 'bvt' with boundary faces incident at v
-  void boundaryVTcorners(uint32_t v, std::vector<uint64_t>& bvt) const;
-
-  // VV relation restricted to incident boundary triangles
-  void boundaryVV(uint32_t v, std::vector<uint32_t>& bvv) const;
-
-  // TRUE if v2 incident boundary triangles have no normals different
-  // than those of boundary triangles incident at edge v1-v2.
-  bool isDoubleFlatV2(uint32_t v1, uint32_t v2) const;
-
-  double maxEnergyAtEdge(uint32_t v1, uint32_t v2) const;
-  double maxEnergyAtFace(uint64_t f) const;
-  double maxEnergyAtVertex(uint32_t v) const;
-
-  bool isCollapsableOnV1(uint32_t v1, uint32_t v2) const {
-      return (isDoubleFlatV2(v1, v2) || !isOnBoundary(v2));
-  }
-
-  void getMeshEdges(std::vector<std::pair<uint32_t, uint32_t>>& edges) const;
-
-  size_t iterativelySwapMesh(double th_energy);
-
-  double getTetEnergy(uint64_t t) const;
 };
 
 
@@ -384,6 +366,10 @@ public:
 
     inline void operator+=(const vector3d& v) { c[0] += v.c[0]; c[1] += v.c[1]; c[2] += v.c[2]; }
     inline void operator*=(const double d) { c[0] *= d; c[1] *= d; c[2] *= d; }
+
+    inline bool operator<(const vector3d& v) const {
+        return (c[0] < v.c[0] || (c[0] == v.c[0] && c[1] < v.c[1]) || (c[0] == v.c[0] && c[1] == v.c[1] && c[2] < v.c[2]));
+    }
 
     inline double dot(const vector3d& p) const { return (c[0] * p.c[0] + c[1] * p.c[1] + c[2] * p.c[2]); }
     inline vector3d cross(const vector3d& p) const { return vector3d(c[1] * p.c[2] - c[2] * p.c[1], c[2] * p.c[0] - c[0] * p.c[2], c[0] * p.c[1] - c[1] * p.c[0]); }
@@ -434,7 +420,7 @@ public:
         return pv.dist_sq(qv) < pv.dist_sq(rv);
     }
 
-    // TRUE if distance p-q is at most twice the distance p-r
+    // TRUE if distance p-q is at most half the distance p-r
     static bool isAtMostTwiceDistanceThan(const pointType* p, const pointType* q, const pointType* r) {
         const vector3d pv(p), qv(q), rv(r);
         return pv.dist_sq(qv) * 4 < pv.dist_sq(rv);

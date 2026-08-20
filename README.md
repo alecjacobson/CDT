@@ -13,7 +13,7 @@ be degenerate, copies of each other or copies of edges in the input triangles.
 # CDT - Constrained Delaunay Tetrahedrization made robust and practical
 This code implements an algorithm to calculate a Constrained Delaunay Tetrahedrization (CDT) of an input PLC represented by on OFF file.
 Steiner points are possibly added to make the input admit a CDT.
-Details of the algorithm are described in "**Constrained Delaunay Tetrahedrization: A robust and practical approach**" by L. Diazzi, D. Panozzo, A. Vaxman and M. Attene (ACM Trans Graphics Vol 42, N. 6, Procs of SIGGRAPH Asia 2023). 
+Details of the algorithm are described in "**Constrained Delaunay Tetrahedrization: A robust and practical approach**" by L. Diazzi, D. Panozzo, A. Vaxman and <a href="http://saturno.ge.imati.cnr.it/ima/personal-old/attene/PersonalPage/attene.html">M. Attene</a> (ACM Trans Graphics Vol 42, N. 6, Procs of SIGGRAPH Asia 2023). 
 You may download a copy here: http://arxiv.org/abs/2309.09805
 
 <p align="center"><img src="teaser_img.png"></p>
