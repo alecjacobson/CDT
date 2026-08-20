@@ -22,10 +22,25 @@ set(ENABLE_AVX2 True)		#Build for x86-64 with AVX2
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED True)
 
-# disable SSE and AVX on MacOS
-if(APPLE)
-set(ENABLE_SSE2 False)
-set(ENABLE_AVX2 False)
+# Use CMake -DLGPL=ON if you opt for the LGPL license
+option(LGPL "LGPL" ON)
+
+# set the project name
+project(cdt)
+
+# Resolve the target architecture. This must happen after project(), which is
+# what populates APPLE and CMAKE_SYSTEM_PROCESSOR.
+if(CMAKE_SYSTEM_PROCESSOR MATCHES "^(arm64|aarch64)$" OR CMAKE_OSX_ARCHITECTURES MATCHES "arm64")
+	# On ARM the x86 flavours are meaningless. nfg's numerics.h keys off the
+	# compiler-defined __ARM_NEON and includes simde's <x86/avx2.h>, so simde
+	# must be fetched whether or not the user asked for NEON above.
+	set(ENABLE_SSE2 False)
+	set(ENABLE_AVX2 False)
+	set(ENABLE_ARMNEON True)
+elseif(APPLE)
+	# disable SSE and AVX on Intel MacOS
+	set(ENABLE_SSE2 False)
+	set(ENABLE_AVX2 False)
 endif()
 
 # AVX includes SSE -> make that explicit
@@ -37,12 +52,6 @@ endif()
 if(ENABLE_ARMNEON AND ENABLE_SSE2)
 message(FATAL_ERROR "ARMNEON and SSE2/AVX2 cannot be both set!")
 endif()
-
-# Use CMake -DLGPL=ON if you opt for the LGPL license
-option(LGPL "LGPL" ON)
-
-# set the project name
-project(cdt)
 
 # add the executable
 add_executable(${PROJECT_NAME} 
