@@ -13,6 +13,11 @@
 
 #pragma intrinsic(fabs)
 
+// Reset the pseudo random generator that segmentRecovery_HSi() uses to shuffle
+// the list of missing edges. Call this before each run to make the result
+// reproducible; the generator starts at 1.
+void seedPLCRandom(uint32_t seed);
+
 // NOTES: 1) "both_acute_ep" edges will be immediatelly split by inserting the middle point (each subedge becomes a "one_acute_ep")
 //        2) sub-edges of "no_acute_ep" and "one_acute_ep" inherit type
 //        3) "flat" edges will be ignored by segment recovery algorithm and will not be further classyfied

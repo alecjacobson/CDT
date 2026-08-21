@@ -193,6 +193,10 @@ Result tetrahedralize(
     if (opts.bounding_box) options += 'b';
     if (opts.verbose) options += 'v';
 
+    // The generator carries over between runs; reset it so that repeated calls
+    // within one process are reproducible.
+    seedPLCRandom(opts.seed);
+
     SteinerCDTStats stats;
     const std::unique_ptr<TetMesh> tin(createSteinerCDT(plc, options.c_str(), &stats));
 

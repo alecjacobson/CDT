@@ -54,7 +54,8 @@ auto tetrahedralize(
     const std::optional<IndexArray>& E,
     bool bounding_box,
     bool verbose,
-    bool inner_only) {
+    bool inner_only,
+    uint32_t seed) {
     if (V.shape(1) != 3) throw std::invalid_argument("V must be #V by 3");
 
     const std::vector<uint32_t> f = to_indices(F, 3, "F");
@@ -64,6 +65,7 @@ auto tetrahedralize(
     opts.bounding_box = bounding_box;
     opts.verbose = verbose;
     opts.inner_only = inner_only;
+    opts.seed = seed;
 
     cdt::Result r = [&] {
         // Long, and it prints; let other threads run and let ^C be noticed.
@@ -98,6 +100,7 @@ NB_MODULE(_cdt, m) {
     m.def("tetrahedralize", &tetrahedralize,
         "V"_a, "F"_a, "E"_a = nb::none(),
         "bounding_box"_a = false, "verbose"_a = false, "inner_only"_a = false,
+        "seed"_a = 1,
         R"(Constrained Delaunay tetrahedrization of a PLC.
 
 Returns (vertices, tets, labels, vertex_map, num_steiner_vertices,

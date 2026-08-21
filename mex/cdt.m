@@ -18,6 +18,11 @@
 %       polyhedron. TV is unaffected, so it may then contain unreferenced
 %       vertices {false}
 %     'Verbose'  followed by whether to report progress {false}
+%     'Seed'  followed by the seed for the shuffle that segment recovery uses
+%       to order the missing edges, which decides where the Steiner points
+%       land. Runs with the same input and seed produce the same output;
+%       different seeds produce different, equally valid tetrahedrizations
+%       {1}
 % Outputs:
 %   TV  #TV by 3 list of output vertex positions. The first
 %     #TV-S.num_steiner_vertices rows are the input vertices.

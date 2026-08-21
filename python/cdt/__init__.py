@@ -54,6 +54,7 @@ def tetrahedralize(
     bounding_box: bool = False,
     verbose: bool = False,
     inner_only: bool = False,
+    seed: int = 1,
 ) -> Tetrahedralization:
     """Constrained Delaunay tetrahedrization of a piecewise linear complex.
 
@@ -78,6 +79,12 @@ def tetrahedralize(
     inner_only : bool
         Drop the tets outside the input polyhedron. Unreferenced vertices are
         kept, so ``vertices`` is unaffected.
+    seed : int
+        Segment recovery processes the missing edges in a shuffled order,
+        which decides where the Steiner points land. Runs with the same input
+        and seed produce the same output; different seeds produce different,
+        equally valid tetrahedrizations. The default reproduces the command
+        line tool.
 
     Returns
     -------
@@ -96,5 +103,5 @@ def tetrahedralize(
         if E.size == 0:
             E = None
     return Tetrahedralization(
-        *_cdt.tetrahedralize(V, F, E, bounding_box, verbose, inner_only)
+        *_cdt.tetrahedralize(V, F, E, bounding_box, verbose, inner_only, seed)
     )

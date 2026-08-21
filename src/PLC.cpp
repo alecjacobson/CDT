@@ -651,9 +651,19 @@ bool PLCx::splitMissingEdge(uint32_t mei) {
     return true;
 }
 
+// State of the linear congruential generator below. Hoisted out of myrand()
+// so that it can be reset: the generator is never reseeded on its own, so a
+// second call to the algorithm within one process would otherwise continue
+// the sequence where the previous call left off and produce a different (still
+// valid) set of Steiner points. That is invisible to the command line tool,
+// which runs the algorithm once per process, but not to the bindings.
+static int myrand_state = 1;
+
+void seedPLCRandom(uint32_t seed) { myrand_state = (int)seed; }
+
 int myrand(void)
 {
-    static int h = 1;
+    int& h = myrand_state;
     return(((h = h * 214013L + 2531011L) >> 16) & 0x7fff);
 }
 

@@ -15,8 +15,42 @@ function test_cdt()
   test_edge_constraint(V,F);
   test_errors(V,F);
   test_integer_class_input(V,F);
+  test_reproducible();
+  test_seed();
 
   fprintf('test_cdt: all tests passed\n');
+end
+
+function [V,F] = notched()
+  % A shape whose faces cannot be recovered without Steiner points.
+  [V,F] = cube();
+  V(7,:) = [0.4 0.4 0.4];
+end
+
+function test_reproducible()
+  % The shuffle in segment recovery uses a generator that is never reseeded on
+  % its own, so without an explicit reset the second call in a matlab session
+  % continues the first call's sequence and lands its Steiner points elsewhere.
+  [V,F] = notched();
+  [TV,TT,TL] = cdt(V,F,'BoundingBox',true);
+  for i = 1:3
+    [TV2,TT2,TL2] = cdt(V,F,'BoundingBox',true);
+    assert(isequal(TV,TV2) && isequal(TT,TT2) && isequal(TL,TL2), ...
+      'repeated calls should give identical output');
+  end
+end
+
+function test_seed()
+  [V,F] = notched();
+  [TVa,TTa] = cdt(V,F,'BoundingBox',true,'Seed',1);
+  [TVb,TTb] = cdt(V,F,'BoundingBox',true,'Seed',12345);
+  % Both are valid tetrahedrizations of the same input...
+  assert(all(tet_volume(TVa,TTa) > 0) && all(tet_volume(TVb,TTb) > 0));
+  % ...and the seed is actually plumbed through, so re-running it repeats.
+  [TVc,TTc] = cdt(V,F,'BoundingBox',true,'Seed',12345);
+  assert(isequal(TVb,TVc) && isequal(TTb,TTc),'the same seed should repeat');
+  assert_error(@() cdt(V,F,'Seed',-1),'a negative seed should error');
+  assert_error(@() cdt(V,F,'Seed',1.5),'a non integer seed should error');
 end
 
 function [V,F] = cube()

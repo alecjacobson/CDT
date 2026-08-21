@@ -97,6 +97,15 @@ std::vector<uint32_t> read_indices(
     return out;
 }
 
+uint32_t read_uint(const mxArray* a, const char* name) {
+    if (mxGetNumberOfElements(a) != 1 || !mxIsNumeric(a) || mxIsComplex(a))
+        fail(std::string(name) + " must be a numeric scalar");
+    const double v = mxGetScalar(a);
+    if (v != (double)(long long)v || v < 0 || v > (double)UINT32_MAX)
+        fail(std::string(name) + " must be an integer in 0:2^32-1");
+    return (uint32_t)v;
+}
+
 bool read_flag(const mxArray* a, const char* name) {
     if (mxGetNumberOfElements(a) != 1 || (!mxIsLogicalScalar(a) && !mxIsNumeric(a)))
         fail(std::string(name) + " must be a logical scalar");
@@ -156,6 +165,8 @@ void run(int nlhs, mxArray* plhs[], int nrhs, const mxArray* prhs[]) {
             opts.inner_only = read_flag(prhs[i], "InnerOnly");
         } else if (name == "Verbose") {
             opts.verbose = read_flag(prhs[i], "Verbose");
+        } else if (name == "Seed") {
+            opts.seed = read_uint(prhs[i], "Seed");
         } else {
             fail("Unknown parameter: " + name);
         }

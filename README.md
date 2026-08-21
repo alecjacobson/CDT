@@ -124,6 +124,20 @@ from what the `cdt` executable writes to a `.tet` file:
 Vertex positions are otherwise identical, including the rounding of Steiner
 points to the nearest representable double.
 
+### Reproducibility
+
+Segment recovery processes the missing edges in a shuffled order, and that
+order decides where the Steiner points land. The generator behind the shuffle
+is never reseeded on its own, which is invisible to the executable (one run
+per process) but not to the bindings: without a reset, the second call in a
+session would continue the first call's sequence and produce a different,
+equally valid tetrahedrization.
+
+Both bindings therefore reset the generator on entry, so the same input gives
+the same output every time, matching what the executable produces. Pass
+`seed=` (python) or `'Seed'` (matlab) to explore other tetrahedrizations of
+the same input.
+
 ## License
 This program is distributed under the terms of either the GNU GPL or the GNU LGPL license.
 The code can be compiled in two ways, depending on how CMake is invoked.

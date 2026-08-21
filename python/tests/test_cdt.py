@@ -15,6 +15,15 @@ def cube():
     return V, F
 
 
+def tetrahedron_with_a_notch():
+    """A shape whose faces cannot be recovered without Steiner points."""
+    V, F = cube()
+    # Push one corner inwards to make a reflex, non convex solid.
+    V = V.copy()
+    V[6] = [0.4, 0.4, 0.4]
+    return V, F
+
+
 def volume(V, T):
     a, b, c, d = (V[T[:, k]] for k in range(4))
     return np.einsum("ij,ij->i", np.cross(b - a, c - a), d - a) / 6.0
@@ -119,6 +128,35 @@ def test_degenerate_triangle_raises_instead_of_exiting():
     F = np.vstack([F, [[0, 1, 1]]])
     with pytest.raises(RuntimeError, match="degenerate"):
         cdt.tetrahedralize(V, F)
+
+
+def test_repeated_calls_are_reproducible():
+    # The shuffle in segment recovery uses a generator that is never reseeded
+    # on its own, so without an explicit reset the second call in a process
+    # continues the first call's sequence and lands its Steiner points
+    # somewhere else.
+    V, F = cube()
+    # A cube needs no Steiner points; a shape that does exercises the shuffle.
+    V, F = tetrahedron_with_a_notch()
+    first = cdt.tetrahedralize(V, F, bounding_box=True)
+    for _ in range(3):
+        again = cdt.tetrahedralize(V, F, bounding_box=True)
+        assert np.array_equal(again.vertices, first.vertices)
+        assert np.array_equal(again.tets, first.tets)
+        assert np.array_equal(again.labels, first.labels)
+
+
+def test_seed_changes_nothing_about_validity():
+    V, F = tetrahedron_with_a_notch()
+    a = cdt.tetrahedralize(V, F, bounding_box=True, seed=1)
+    b = cdt.tetrahedralize(V, F, bounding_box=True, seed=12345)
+    # Both are valid tetrahedrizations of the same input...
+    for r in (a, b):
+        assert np.all(volume(r.vertices, r.tets) > 0)
+        assert np.array_equal(r.vertices[r.vertex_map], V)
+    # ...and the seed is actually plumbed through, so re-running it repeats.
+    assert np.array_equal(
+        cdt.tetrahedralize(V, F, bounding_box=True, seed=12345).tets, b.tets)
 
 
 def test_accepts_lists_and_other_dtypes():

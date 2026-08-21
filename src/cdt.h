@@ -30,6 +30,11 @@ struct Options {
     // Drop the tets classified as OUTER from the output (-r). Vertices are
     // kept as they are, so the output may contain unreferenced vertices.
     bool inner_only = false;
+    // Segment recovery processes the missing edges in a shuffled order, which
+    // decides where the Steiner points land. The generator is reset to this
+    // value on entry, so the same input and seed always give the same output.
+    // 1 reproduces what the command line tool does.
+    uint32_t seed = 1;
 };
 
 struct Result {
