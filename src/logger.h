@@ -1,7 +1,10 @@
+#ifndef _LOGGER_
+#define _LOGGER_
+
 #include <chrono>
 
-FILE* log_fp;
-std::chrono::steady_clock::time_point time_point;
+inline FILE* log_fp;
+inline std::chrono::steady_clock::time_point time_point;
 
 inline void startLogging(const char* fn) {
     if (fn != NULL) {
@@ -58,7 +61,7 @@ inline void finishLogging() {
 // To ensure correct resolution of symbols, add Psapi.lib to TARGETLIBS
 // and compile with -DPSAPI_VERSION=1
 
-double getPeakMegabytesUsed()
+inline double getPeakMegabytesUsed()
 {
     HANDLE hProcess = OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, FALSE, GetCurrentProcessId());
     if (NULL == hProcess) return 0;
@@ -89,4 +92,6 @@ inline void logMemInfo() {
     getrusage(RUSAGE_SELF, &r_usage);
     fprintf(log_fp, ", %.2f", r_usage.ru_maxrss / 1000.0);
 }
+#endif
+
 #endif

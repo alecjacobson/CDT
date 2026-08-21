@@ -1,3 +1,19 @@
 build
+build-*
 not_for_repo
 .local.cmake
+
+# python bindings
+__pycache__/
+*.egg-info/
+dist/
+wheelhouse/
+python/cdt/_cdt*.so
+python/cdt/_cdt*.pyd
+python/cdt/_cdt*.dylib
+
+# matlab bindings
+mex/*.mexa64
+mex/*.mexmaca64
+mex/*.mexmaci64
+mex/*.mexw64

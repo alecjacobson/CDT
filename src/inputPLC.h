@@ -1,3 +1,6 @@
+#ifndef _INPUT_PLC_
+#define _INPUT_PLC_
+
 #include <iostream>
 #include <fstream>
 // For ip_error
@@ -25,7 +28,7 @@ public:
     vBlock(uint32_t b, uint32_t e, uint32_t d) : begin(b), end(e), dir_split(d) {}
 };
 
-void reorderVertices(
+inline void reorderVertices(
   double* coordinates, 
   uint32_t numVertices, 
   uint32_t* triVertices, 
@@ -75,14 +78,14 @@ public:
     uint32_t original_index;  // Index to support reordering
 };
 
-bool misAlignment(const double* p, const double* q, const double* r)
+inline bool misAlignment(const double* p, const double* q, const double* r)
 {
     return orient2d(p[0], p[1], q[0], q[1], r[0], r[1]) ||
         orient2d(p[1], p[2], q[1], q[2], r[1], r[2]) ||
         orient2d(p[0], p[2], q[0], q[2], r[0], r[2]);
 }
 
-void read_OBJ_file(
+inline void read_OBJ_file(
     const char* filename,
     double **vertices_p, uint32_t *npts,
     uint32_t **edge_vertices_p, uint32_t *nedge, 
@@ -142,7 +145,7 @@ void read_OBJ_file(
 
 }
 
-void read_OFF_file(const char* filename,
+inline void read_OFF_file(const char* filename,
     double** vertices_p, uint32_t* npts,
     uint32_t** tri_vertices_p, uint32_t* ntri, bool verbose) {
 
@@ -190,7 +193,7 @@ void read_OFF_file(const char* filename,
     fclose(file);
 }
 
-int vertex_compare(const void* void_v1, const void* void_v2)
+inline int vertex_compare(const void* void_v1, const void* void_v2)
 {
     const input_vertex_t* v1 = (input_vertex_t*)void_v1;
     const input_vertex_t* v2 = (input_vertex_t*)void_v2;
@@ -202,7 +205,7 @@ int vertex_compare(const void* void_v1, const void* void_v2)
         ((dz > 0) - (dz < 0)));
 }
 
-int triOrder(const void* t1, const void* t2) {
+inline int triOrder(const void* t1, const void* t2) {
     const uint32_t* a = (uint32_t*)t1;
     const uint32_t* b = (uint32_t*)t2;
 
@@ -221,7 +224,7 @@ inline bool coincident_points(const input_vertex_t* a, const input_vertex_t* b)
     return !vertex_compare(a->coord, b->coord);
 }
 
-void remove_duplicated_points(input_vertex_t** vertices_p, uint32_t* npts,
+inline void remove_duplicated_points(input_vertex_t** vertices_p, uint32_t* npts,
     input_vertex_t* vrts_copy,
     uint32_t* map, uint32_t* diff) {
 
@@ -254,7 +257,7 @@ void remove_duplicated_points(input_vertex_t** vertices_p, uint32_t* npts,
 
 /// //////////////////////////////////////////////////////////////////////////////////////////
 
-void read_nodes_and_constraints(
+inline void read_nodes_and_constraints(
   double* coords_A, 
   uint32_t npts_A, 
   uint32_t* tri_idx_A, 
@@ -508,3 +511,5 @@ public:
             coordinates.push_back(idx[j] ? (bbmax[j%3]) : (bbmin[j%3]));
     }
 };
+
+#endif
