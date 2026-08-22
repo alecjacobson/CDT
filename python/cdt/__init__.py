@@ -70,7 +70,9 @@ def tetrahedralize(
     E : (#E, 2) array of int, optional
         Segment constraints, indices into ``V``. These need not be edges of
         ``F``, but must not be degenerate or duplicate each other or the
-        triangle edges.
+        triangle edges. Note that a segment has no incident faces, so passing
+        any makes the PLC non-polyhedral: ``is_polyhedron`` comes back False
+        and every tet is labelled ``INNER``.
     bounding_box : bool
         Add eight vertices enclosing the input, so that the result covers a
         box rather than the convex hull of the input.

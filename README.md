@@ -1,12 +1,50 @@
-This fork allows inputting a .obj file with
+# Changes in this fork
 
-```
-l [v1] [v2]
-```
+This is a fork of [MarcoAttene/CDT](https://github.com/MarcoAttene/CDT). The
+upstream README follows below. What this fork adds:
 
-line-segment indices in addition to faces (basic `f [v1] [v2] [v3]`). There's no
-attempt to check that line segments are valid and non-redundant. They shouldn't
-be degenerate, copies of each other or copies of edges in the input triangles.
+**Line segment constraints.** Alongside triangles, the algorithm accepts a
+list of segments that the tetrahedrization must conform to. On the command
+line these come from `l [v1] [v2]` lines in a `.obj` file, next to the usual
+`f [v1] [v2] [v3]` faces; the bindings take them as an `#E by 2` array. No
+attempt is made to check that the segments are valid and non-redundant: they
+must not be degenerate, duplicate each other, or duplicate an edge of an input
+triangle.
+
+> Passing segments makes the PLC non-polyhedral by construction, since a
+> segment has no incident faces. Inside/outside classification is then
+> meaningless and every tet is reported as inside, exactly as upstream does
+> for any input with odd-valency edges.
+
+**Python bindings.** [nanobind](https://github.com/wjakob/nanobind) bindings
+packaged with scikit-build-core. See [Python bindings](#python-bindings).
+
+**MATLAB bindings.** A mex file built the way
+[gptoolbox](https://github.com/alecjacobson/gptoolbox) builds its own. See
+[MATLAB bindings](#matlab-bindings).
+
+**An in-memory API.** `cdt::tetrahedralize` in `src/cdt.h` runs the algorithm
+on plain arrays and returns the result as plain arrays, instead of reading and
+writing files. The command line tool and both bindings share it.
+
+**Reproducible output.** Segment recovery shuffles the missing edges with a
+generator that upstream never reseeds. One run per process hides this, but a
+long-lived binding does not: each call continued the previous call's sequence
+and produced a different tetrahedrization. The generator is now reset per run,
+and the seed is exposed. See [Reproducibility](#reproducibility).
+
+**Apple silicon builds.** The architecture is detected after `project()`, so
+`APPLE` and `CMAKE_SYSTEM_PROCESSOR` are actually populated when it is
+checked, and simde is fetched on arm64 regardless of the flags at the top of
+`CMakeLists.txt`, since nfg's `numerics.h` includes it whenever `__ARM_NEON`
+is defined.
+
+**Headers usable from more than one translation unit.** `inputPLC.h` and
+`logger.h` had no include guards and defined non-`inline` functions and
+globals, which is invisible to a single-file front end but breaks any second
+consumer. Also, nfg's `ip_error()` calls `exit(0)`; the build now serves a
+copy of `numerics.h` that throws instead, so a fatal error cannot take down
+the host interpreter. The fetched sources are left untouched.
 
 -------------------------------------------------------------
 

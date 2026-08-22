@@ -10,7 +10,9 @@
 %   Optional:
 %     'Edges'  followed by a #E by 2 list of segment constraints, indices into
 %       rows of V. These need not be edges of F, but must not be degenerate or
-%       duplicate each other or the edges of F.
+%       duplicate each other or the edges of F. Note that a segment has no
+%       incident faces, so passing any makes the complex non-polyhedral:
+%       S.is_polyhedron comes back false and every tet is labelled inside.
 %     'BoundingBox'  followed by whether to add eight vertices enclosing the
 %       input, so the output covers a box rather than the convex hull of the
 %       input {false}
